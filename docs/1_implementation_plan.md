@@ -81,11 +81,15 @@ CREATE TABLE agents (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
-    identity TEXT NOT NULL DEFAULT '',         -- 人格描述
-    system_prompt TEXT NOT NULL DEFAULT '',    -- 完整 system prompt（空 = 自動從 identity+skills 組建）
-    model TEXT NOT NULL DEFAULT '',            -- 模型覆寫（空 = 用預設）
+    -- 結構化 identity（參考 zeroclaw 的 SOUL.md + IDENTITY.md 概念）
+    soul TEXT NOT NULL DEFAULT '',                -- 核心行為規範（你是誰、核心價值觀、行為準則）
+    personality TEXT NOT NULL DEFAULT '',         -- 人格特質（MBTI、語氣、態度）
+    communication_style TEXT NOT NULL DEFAULT '', -- 溝通風格（正式/非正式、用語習慣、回應長度）
+    instructions TEXT NOT NULL DEFAULT '',        -- 其他指示（特定任務規則、限制條件）
+    system_prompt TEXT NOT NULL DEFAULT '',       -- 完整 system prompt 覆寫（非空時忽略上面四欄）
+    model TEXT NOT NULL DEFAULT '',               -- 模型覆寫（空 = 用預設）
     temperature REAL NOT NULL DEFAULT 0.7,
-    is_main_agent INTEGER NOT NULL DEFAULT 0, -- 主要 Agent 標記，不可被修改
+    is_main_agent INTEGER NOT NULL DEFAULT 0,    -- 主要 Agent 標記，不可被修改
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -154,9 +158,12 @@ GET    /health                               → 健康檢查
 **Tool definitions:**
 | Tool | 參數 | 說明 |
 |------|------|------|
-| `get_agent_config` | — | 讀取目標 agent 設定 |
-| `update_agent_identity` | `{identity: str}` | 更新人格描述 |
-| `update_agent_system_prompt` | `{system_prompt: str}` | 更新 system prompt |
+| `get_agent_config` | — | 讀取目標 agent 完整設定 |
+| `update_agent_soul` | `{soul: str}` | 更新核心行為規範（你是誰、核心價值觀） |
+| `update_agent_personality` | `{personality: str}` | 更新人格特質（MBTI、語氣、態度） |
+| `update_agent_communication_style` | `{style: str}` | 更新溝通風格（正式度、用語、回應長度） |
+| `update_agent_instructions` | `{instructions: str}` | 更新其他指示（任務規則、限制） |
+| `update_agent_system_prompt` | `{system_prompt: str}` | 完整覆寫 system prompt（進階用） |
 | `update_agent_model` | `{model: str}` | 更新模型 |
 | `update_agent_temperature` | `{temperature: f64}` | 更新溫度 |
 | `list_agent_skills` | — | 列出技能 |
