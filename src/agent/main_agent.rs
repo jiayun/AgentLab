@@ -11,6 +11,7 @@ use crate::db::agents::{self, Agent};
 use crate::db::conversations;
 use crate::db::skills;
 use crate::db::DbPool;
+use crate::openapi::parser;
 use crate::provider::openai_compatible::OpenAiCompatibleProvider;
 use crate::provider::traits::*;
 
@@ -105,6 +106,33 @@ fn tool_definitions() -> Vec<ToolDefinition> {
             "List all OpenAPI skills configured for this agent",
             json!({"type": "object", "properties": {}, "required": []}),
         ),
+        ToolDefinition::new(
+            "add_agent_skill",
+            "Add an OpenAPI skill to this agent. Parses the OpenAPI spec and stores the operations so the agent can call them.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Skill name (e.g. 'petstore')"},
+                    "description": {"type": "string", "description": "Brief description of this skill"},
+                    "openapi_spec": {"type": "string", "description": "Complete OpenAPI 3.x JSON spec"},
+                    "base_url": {"type": "string", "description": "API server base URL (e.g. 'https://petstore3.swagger.io/api/v3')"},
+                    "auth_header": {"type": "string", "description": "Optional auth header name (e.g. 'Authorization')"},
+                    "auth_value": {"type": "string", "description": "Optional auth header value (e.g. 'Bearer xxx')"}
+                },
+                "required": ["name", "openapi_spec", "base_url"]
+            }),
+        ),
+        ToolDefinition::new(
+            "remove_agent_skill",
+            "Remove an OpenAPI skill from this agent by name",
+            json!({
+                "type": "object",
+                "properties": {
+                    "skill_name": {"type": "string", "description": "Name of the skill to remove"}
+                },
+                "required": ["skill_name"]
+            }),
+        ),
     ]
 }
 
@@ -177,6 +205,55 @@ fn execute_tool(
                     .map(|s| json!({"name": s.name, "description": s.description}))
                     .collect();
                 Ok(serde_json::to_string_pretty(&list)?)
+            }
+        }
+        "add_agent_skill" => {
+            let name = args["name"].as_str().unwrap_or("");
+            let description = args["description"].as_str().unwrap_or("");
+            let openapi_spec = args["openapi_spec"].as_str().unwrap_or("");
+            let base_url = args["base_url"].as_str().unwrap_or("");
+            let auth_header = args["auth_header"].as_str();
+            let auth_value = args["auth_value"].as_str();
+
+            if name.is_empty() || openapi_spec.is_empty() || base_url.is_empty() {
+                return Ok("Error: name, openapi_spec, and base_url are required.".to_string());
+            }
+
+            let operations = parser::parse_openapi_spec(openapi_spec)?;
+            let parsed_tools_json = serde_json::to_string(&operations)?;
+            let op_count = operations.len();
+
+            skills::create_skill(
+                db,
+                &agent.id,
+                name,
+                description,
+                openapi_spec,
+                &parsed_tools_json,
+                base_url,
+                auth_header,
+                auth_value,
+            )?;
+
+            Ok(format!(
+                "Skill '{name}' added successfully. Parsed {op_count} operation(s) from the OpenAPI spec."
+            ))
+        }
+        "remove_agent_skill" => {
+            let skill_name = args["skill_name"].as_str().unwrap_or("");
+            if skill_name.is_empty() {
+                return Ok("Error: skill_name is required.".to_string());
+            }
+
+            let agent_skills = skills::list_skills(db, &agent.id)?;
+            let skill = agent_skills.iter().find(|s| s.name == skill_name);
+
+            match skill {
+                Some(s) => {
+                    skills::delete_skill(db, &agent.id, &s.id)?;
+                    Ok(format!("Skill '{skill_name}' removed successfully."))
+                }
+                None => Ok(format!("Skill '{skill_name}' not found.")),
             }
         }
         _ => Ok(format!("Unknown tool: {tool_name}")),
