@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Configure {{ agent.display_name }} - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Configure: {{ agent.display_name }}</h1>
+    <a href="/admin/agents/{{ agent.id }}/chat" class="btn btn-secondary">Chat with Agent</a>
+</div>
+
+<div class="configure-layout">
+    <div class="chat-panel">
+        <div class="chat-messages" id="chat-messages">
+            <div class="system-message">
+                Talk to the Main Agent to configure <strong>{{ agent.display_name }}</strong>.
+                Try saying things like "Make this agent a friendly customer support assistant" or
+                "Set the personality to be formal and professional".
+            </div>
+        </div>
+        <form id="configure-form" class="chat-input-form" onsubmit="sendConfigureMessage(event)">
+            <input type="hidden" id="session-id" value="">
+            <input type="text" id="message-input" placeholder="Describe how you want this agent to behave..."
+                   autocomplete="off" autofocus>
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+
+    <div class="config-panel">
+        <h3>Current Configuration</h3>
+        <div id="config-display">
+            <div class="config-field">
+                <label>Soul</label>
+                <pre>{{ agent.soul }}</pre>
+            </div>
+            <div class="config-field">
+                <label>Personality</label>
+                <pre>{{ agent.personality }}</pre>
+            </div>
+            <div class="config-field">
+                <label>Communication Style</label>
+                <pre>{{ agent.communication_style }}</pre>
+            </div>
+            <div class="config-field">
+                <label>Instructions</label>
+                <pre>{{ agent.instructions }}</pre>
+            </div>
+            <div class="config-field">
+                <label>Model</label>
+                <pre>{{ agent.model }}</pre>
+            </div>
+            <div class="config-field">
+                <label>Temperature</label>
+                <pre>{{ agent.temperature }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const agentId = "{{ agent.id }}";
+let sessionId = "";
+
+function sendConfigureMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById("message-input");
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    appendMessage("user", msg);
+    input.value = "";
+
+    const params = new URLSearchParams({message: msg});
+    if (sessionId) params.append("session_id", sessionId);
+
+    const assistantDiv = appendMessage("assistant", "");
+    const source = new EventSource(`/admin/api/agents/${agentId}/configure/stream?${params}`);
+
+    source.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.done) {
+            source.close();
+            refreshConfig();
+            return;
+        }
+        if (data.session_id) sessionId = data.session_id;
+        if (data.delta) {
+            assistantDiv.querySelector(".message-content").textContent += data.delta;
+            scrollToBottom();
+        }
+        if (data.error) {
+            assistantDiv.querySelector(".message-content").textContent += "[Error: " + data.error + "]";
+            source.close();
+        }
+    };
+
+    source.onerror = function() {
+        source.close();
+    };
+}
+
+function appendMessage(role, content) {
+    const messages = document.getElementById("chat-messages");
+    const div = document.createElement("div");
+    div.className = `message message-${role}`;
+    div.innerHTML = `<div class="message-role">${role}</div><div class="message-content">${escapeHtml(content)}</div>`;
+    messages.appendChild(div);
+    scrollToBottom();
+    return div;
+}
+
+function scrollToBottom() {
+    const messages = document.getElementById("chat-messages");
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function refreshConfig() {
+    fetch(`/admin/api/agents/${agentId}/config`)
+        .then(r => r.json())
+        .then(agent => {
+            const d = document.getElementById("config-display");
+            d.innerHTML = `
+                <div class="config-field"><label>Soul</label><pre>${escapeHtml(agent.soul)}</pre></div>
+                <div class="config-field"><label>Personality</label><pre>${escapeHtml(agent.personality)}</pre></div>
+                <div class="config-field"><label>Communication Style</label><pre>${escapeHtml(agent.communication_style)}</pre></div>
+                <div class="config-field"><label>Instructions</label><pre>${escapeHtml(agent.instructions)}</pre></div>
+                <div class="config-field"><label>Model</label><pre>${escapeHtml(agent.model || "(default)")}</pre></div>
+                <div class="config-field"><label>Temperature</label><pre>${agent.temperature}</pre></div>
+            `;
+        });
+}
+</script>
+{% endblock %}

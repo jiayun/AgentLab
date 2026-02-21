@@ -1,0 +1,10 @@
+# AgentLab Configuration
+
+[server]
+port = 8080
+
+[provider]
+# Ollama OpenAI-compatible API endpoint
+api_url = "http://localhost:11434/v1"
+model = "gemini-3-flash-preview:cloud"
+# api_key = ""  # Optional: set if your provider requires authentication

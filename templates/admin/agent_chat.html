@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Chat with {{ agent.display_name }} - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ agent.display_name }}</h1>
+    <a href="/admin/agents/{{ agent.id }}" class="btn">Configure</a>
+</div>
+
+<div class="chat-fullpage">
+    <div class="chat-messages" id="chat-messages"></div>
+    <form id="chat-form" class="chat-input-form" onsubmit="sendChatMessage(event)">
+        <input type="hidden" id="session-id" value="">
+        <input type="text" id="message-input" placeholder="Type a message..."
+               autocomplete="off" autofocus>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+</div>
+
+<script>
+const agentId = "{{ agent.id }}";
+let sessionId = "";
+
+function sendChatMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById("message-input");
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    appendMessage("user", msg);
+    input.value = "";
+
+    const params = new URLSearchParams({message: msg});
+    if (sessionId) params.append("session_id", sessionId);
+
+    const assistantDiv = appendMessage("assistant", "");
+    const source = new EventSource(`/admin/api/agents/${agentId}/chat/stream?${params}`);
+
+    source.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.done) {
+            source.close();
+            return;
+        }
+        if (data.session_id) sessionId = data.session_id;
+        if (data.delta) {
+            assistantDiv.querySelector(".message-content").textContent += data.delta;
+            scrollToBottom();
+        }
+        if (data.error) {
+            assistantDiv.querySelector(".message-content").textContent += "[Error: " + data.error + "]";
+            source.close();
+        }
+    };
+
+    source.onerror = function() {
+        source.close();
+    };
+}
+
+function appendMessage(role, content) {
+    const messages = document.getElementById("chat-messages");
+    const div = document.createElement("div");
+    div.className = `message message-${role}`;
+    div.innerHTML = `<div class="message-role">${role}</div><div class="message-content">${escapeHtml(content)}</div>`;
+    messages.appendChild(div);
+    scrollToBottom();
+    return div;
+}
+
+function scrollToBottom() {
+    const messages = document.getElementById("chat-messages");
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

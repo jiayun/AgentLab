@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Agents - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Agents</h1>
+    <a href="/admin/agents/new" class="btn btn-primary">+ New Agent</a>
+</div>
+
+{% if agents.is_empty() %}
+<div class="empty-state">
+    <p>No agents yet. Create your first agent to get started.</p>
+</div>
+{% else %}
+<div class="agent-grid">
+    {% for agent in agents %}
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <h3>{{ agent.display_name }}</h3>
+            <span class="agent-name">@{{ agent.name }}</span>
+        </div>
+        <div class="agent-card-body">
+            {% if !agent.soul.is_empty() %}
+            <p class="agent-soul">{{ agent.soul }}</p>
+            {% else %}
+            <p class="text-muted">No configuration yet</p>
+            {% endif %}
+        </div>
+        <div class="agent-card-footer">
+            <a href="/admin/agents/{{ agent.id }}" class="btn btn-sm">Configure</a>
+            <a href="/admin/agents/{{ agent.id }}/chat" class="btn btn-sm btn-secondary">Chat</a>
+            <button class="btn btn-sm btn-danger"
+                    hx-delete="/admin/api/agents/{{ agent.id }}"
+                    hx-confirm="Delete agent '{{ agent.display_name }}'?"
+                    hx-target="closest .agent-card"
+                    hx-swap="outerHTML">Delete</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
