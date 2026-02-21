@@ -91,6 +91,8 @@ pub async fn execute_operation(
         }
     }
 
+    tracing::info!(method = %operation.method, %url, "Executing OpenAPI operation");
+
     // Execute request
     let resp = req
         .send()
@@ -101,6 +103,7 @@ pub async fn execute_operation(
     let body = resp.text().await.unwrap_or_default();
 
     if status.is_success() {
+        tracing::info!(status = %status, "OpenAPI operation succeeded");
         // Try to format as pretty JSON
         if let Ok(json) = serde_json::from_str::<Value>(&body) {
             Ok(serde_json::to_string_pretty(&json).unwrap_or(body))
@@ -108,6 +111,8 @@ pub async fn execute_operation(
             Ok(body)
         }
     } else {
+        let truncated = if body.len() > 500 { &body[..500] } else { &body };
+        tracing::warn!(status = %status, body = %truncated, "OpenAPI operation returned non-success status");
         Ok(format!("HTTP {status}: {body}"))
     }
 }

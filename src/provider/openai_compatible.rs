@@ -54,11 +54,14 @@ impl OpenAiCompatibleProvider {
             "stream": false,
         });
 
+        let tool_count = tools.map(|t| t.len()).unwrap_or(0);
         if let Some(tools) = tools {
             if !tools.is_empty() {
                 body["tools"] = serde_json::to_value(tools)?;
             }
         }
+
+        tracing::info!(model = %self.model, tool_count, "LLM chat request");
 
         let resp = self
             .build_request(&body)
@@ -69,6 +72,7 @@ impl OpenAiCompatibleProvider {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %text, "LLM API error");
             anyhow::bail!("LLM API error {status}: {text}");
         }
 
@@ -79,10 +83,18 @@ impl OpenAiCompatibleProvider {
             .next()
             .context("No choices in LLM response")?;
 
-        Ok(ChatResponse {
+        let response = ChatResponse {
             text: choice.message.content,
             tool_calls: choice.message.tool_calls.unwrap_or_default(),
-        })
+        };
+
+        if response.has_tool_calls() {
+            tracing::info!(tool_calls = response.tool_calls.len(), "LLM responded with tool calls");
+        } else {
+            tracing::info!(text_len = response.text.as_ref().map(|t| t.len()).unwrap_or(0), "LLM responded with text");
+        }
+
+        Ok(response)
     }
 
     /// Streaming chat (no tools) — returns a channel receiver of StreamChunks
@@ -93,6 +105,8 @@ impl OpenAiCompatibleProvider {
         model_override: Option<&str>,
     ) -> Result<mpsc::Receiver<StreamChunk>> {
         let model = model_override.unwrap_or(&self.model);
+        tracing::info!(model = %model, "LLM stream_chat request");
+
         let body = serde_json::json!({
             "model": model,
             "messages": messages,
@@ -110,6 +124,7 @@ impl OpenAiCompatibleProvider {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %text, "LLM streaming API error");
             anyhow::bail!("LLM API error {status}: {text}");
         }
 

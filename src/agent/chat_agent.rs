@@ -48,9 +48,6 @@ pub async fn run_chat(
     let provider = OpenAiCompatibleProvider::new(&config.provider, http_client.clone());
     let system_prompt = super::prompt::build_agent_system_prompt(agent);
 
-    // TODO: model override per-agent not yet supported in provider.chat()
-    // The provider uses the global model from config for now.
-
     // Load skills and tool definitions
     let agent_skills = skills::list_skills(db, &agent.id)?;
     let mut tool_defs: Vec<ToolDefinition> = Vec::new();
@@ -68,6 +65,13 @@ pub async fn run_chat(
             parsed_ops.extend(ops);
         }
     }
+
+    tracing::info!(
+        agent_name = %agent.name,
+        skills = agent_skills.len(),
+        tools = tool_defs.len(),
+        "Chat agent run_chat started"
+    );
 
     let tools_ref = if tool_defs.is_empty() {
         None
@@ -102,6 +106,7 @@ pub async fn run_chat(
                 )?;
 
                 for tc in &resp.tool_calls {
+                    tracing::info!(operation_id = %tc.function.name, "Executing skill tool");
                     let result = execute_skill_tool(
                         http_client,
                         &agent_skills,
@@ -110,6 +115,7 @@ pub async fn run_chat(
                         &tc.function.arguments,
                     )
                     .await?;
+                    tracing::debug!(operation_id = %tc.function.name, result_len = result.len(), "Skill tool result");
 
                     messages.push(ChatMessage::tool_result(&tc.id, &result));
                     conversations::add_message(
@@ -182,6 +188,12 @@ pub fn run_chat_stream(
         let has_skills = skills::list_skills(&db, &agent.id)
             .map(|s| !s.is_empty())
             .unwrap_or(false);
+
+        tracing::info!(
+            agent_name = %agent.name,
+            mode = if has_skills { "tools" } else { "streaming" },
+            "Chat agent run_chat_stream started"
+        );
 
         if has_skills {
             // Use non-streaming path for tool calling, then stream the result

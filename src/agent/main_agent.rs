@@ -268,6 +268,8 @@ pub async fn run_configure(
     agent: &Agent,
     conversation_id: &str,
 ) -> Result<String> {
+    tracing::info!(agent_name = %agent.name, conversation_id, "Main agent configure started");
+
     let provider = OpenAiCompatibleProvider::new(&config.provider, http_client.clone());
     let system_prompt = super::prompt::build_main_agent_system_prompt(agent);
     let tools = tool_definitions();
@@ -288,10 +290,11 @@ pub async fn run_configure(
     }
 
     // Tool call loop
-    for _ in 0..MAX_TOOL_ITERATIONS {
+    for iteration in 0..MAX_TOOL_ITERATIONS {
         let resp = provider.chat(&messages, Some(&tools), 0.7).await?;
 
         if resp.has_tool_calls() {
+            tracing::debug!(iteration, tool_calls = resp.tool_calls.len(), "Tool loop: LLM requested tool calls");
             // Add assistant message with tool calls
             let tc_msg = ChatMessage::assistant_with_tool_calls(
                 resp.text.as_deref(),
@@ -312,7 +315,14 @@ pub async fn run_configure(
 
             // Execute each tool call
             for tc in &resp.tool_calls {
-                let result = execute_tool(db, agent, &tc.function.name, &tc.function.arguments)?;
+                tracing::info!(tool_name = %tc.function.name, "Executing main agent tool");
+                let result = match execute_tool(db, agent, &tc.function.name, &tc.function.arguments) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::error!(tool_name = %tc.function.name, error = %e, "Main agent tool execution failed");
+                        return Err(e);
+                    }
+                };
                 let tool_msg = ChatMessage::tool_result(&tc.id, &result);
                 messages.push(tool_msg);
 
@@ -327,10 +337,12 @@ pub async fn run_configure(
                 )?;
             }
         } else {
+            tracing::debug!(iteration, "Tool loop: LLM responded with final text");
             return Ok(resp.text_or_empty());
         }
     }
 
+    tracing::info!("Main agent reached max tool iterations ({MAX_TOOL_ITERATIONS})");
     Ok("I've made the requested changes. Please check the configuration panel to verify.".to_string())
 }
 

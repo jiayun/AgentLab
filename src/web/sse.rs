@@ -34,6 +34,8 @@ pub async fn configure_stream(
         conversations::add_message(&state.db, &conv.id, "user", msg, None, None)?;
     }
 
+    tracing::info!(session_id = %session_id, agent_name = %agent.name, "SSE configure_stream started");
+
     let db = state.db.clone();
     let config = state.config.clone();
     let http_client = state.http_client.clone();
@@ -61,6 +63,8 @@ pub async fn chat_stream(
     if let Some(msg) = &query.message {
         conversations::add_message(&state.db, &conv.id, "user", msg, None, None)?;
     }
+
+    tracing::info!(session_id = %session_id, agent_name = %agent.name, "SSE chat_stream started");
 
     let db = state.db.clone();
     let config = state.config.clone();
