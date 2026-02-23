@@ -41,7 +41,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         .route(
             "/agents/{id}/skills",
-            axum::routing::post(handlers::api_upload_skill),
+            axum::routing::get(handlers::api_list_skills)
+                .post(handlers::api_upload_skill),
         )
         .route(
             "/agents/{id}/skills/{skill_id}",

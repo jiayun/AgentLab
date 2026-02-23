@@ -19,8 +19,8 @@
         </div>
         <form id="configure-form" class="chat-input-form" onsubmit="sendConfigureMessage(event)">
             <input type="hidden" id="session-id" value="">
-            <input type="text" id="message-input" placeholder="Describe how you want this agent to behave..."
-                   autocomplete="off" autofocus>
+            <textarea id="message-input" placeholder="Describe how you want this agent to behave..."
+                      rows="1" autocomplete="off" autofocus></textarea>
             <button type="submit" class="btn btn-primary">Send</button>
         </form>
     </div>
@@ -53,6 +53,11 @@
                 <pre>{{ agent.temperature }}</pre>
             </div>
         </div>
+
+        <h3>Skills</h3>
+        <div id="skills-display">
+            <p class="text-muted">Loading skills...</p>
+        </div>
     </div>
 </div>
 
@@ -68,6 +73,7 @@ function sendConfigureMessage(e) {
 
     appendMessage("user", msg);
     input.value = "";
+    input.style.height = "auto";
 
     const params = new URLSearchParams({message: msg});
     if (sessionId) params.append("session_id", sessionId);
@@ -80,6 +86,7 @@ function sendConfigureMessage(e) {
         if (data.done) {
             source.close();
             refreshConfig();
+            refreshSkills();
             return;
         }
         if (data.session_id) sessionId = data.session_id;
@@ -119,6 +126,56 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Textarea: Enter to send, Shift+Enter to newline, auto-resize
+const messageInput = document.getElementById("message-input");
+messageInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("configure-form").dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+});
+messageInput.addEventListener("input", function() {
+    this.style.height = "auto";
+    this.style.height = this.scrollHeight + "px";
+});
+
+function refreshSkills() {
+    fetch(`/admin/api/agents/${agentId}/skills`)
+        .then(r => r.json())
+        .then(skills => {
+            const container = document.getElementById("skills-display");
+            if (!skills.length) {
+                container.innerHTML = '<p class="text-muted">No skills configured.</p>';
+                return;
+            }
+            container.innerHTML = skills.map(s => {
+                const name = escapeHtml(s.name);
+                const desc = escapeHtml(s.description || "(no description)");
+                const tools = s.tool_count + " tool" + (s.tool_count !== 1 ? "s" : "");
+                return '<div class="config-field" style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">'
+                    + '<div style="flex:1;min-width:0;">'
+                    + '<label>' + name + '</label>'
+                    + '<pre>' + desc + '\n' + tools + '</pre>'
+                    + '</div>'
+                    + '<button class="btn btn-danger btn-sm" data-skill-id="' + s.id + '" data-skill-name="' + name + '" onclick="deleteSkill(this.dataset.skillId, this.dataset.skillName)">Delete</button>'
+                    + '</div>';
+            }).join("");
+        })
+        .catch(err => {
+            document.getElementById("skills-display").innerHTML =
+                '<p class="text-muted">Failed to load skills.</p>';
+            console.error("refreshSkills error:", err);
+        });
+}
+
+function deleteSkill(skillId, name) {
+    if (!confirm('Delete skill "' + name + '"?')) return;
+    fetch(`/admin/api/agents/${agentId}/skills/${skillId}`, { method: "DELETE" })
+        .then(r => {
+            if (r.ok) refreshSkills();
+        });
+}
+
 function refreshConfig() {
     fetch(`/admin/api/agents/${agentId}/config`)
         .then(r => r.json())
@@ -134,5 +191,7 @@ function refreshConfig() {
             `;
         });
 }
+
+refreshSkills();
 </script>
 {% endblock %}

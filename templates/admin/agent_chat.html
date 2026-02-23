@@ -12,8 +12,8 @@
     <div class="chat-messages" id="chat-messages"></div>
     <form id="chat-form" class="chat-input-form" onsubmit="sendChatMessage(event)">
         <input type="hidden" id="session-id" value="">
-        <input type="text" id="message-input" placeholder="Type a message..."
-               autocomplete="off" autofocus>
+        <textarea id="message-input" placeholder="Type a message..."
+                  rows="1" autocomplete="off" autofocus></textarea>
         <button type="submit" class="btn btn-primary">Send</button>
     </form>
 </div>
@@ -30,6 +30,7 @@ function sendChatMessage(e) {
 
     appendMessage("user", msg);
     input.value = "";
+    input.style.height = "auto";
 
     const params = new URLSearchParams({message: msg});
     if (sessionId) params.append("session_id", sessionId);
@@ -79,5 +80,18 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Textarea: Enter to send, Shift+Enter to newline, auto-resize
+const messageInput = document.getElementById("message-input");
+messageInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("chat-form").dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+});
+messageInput.addEventListener("input", function() {
+    this.style.height = "auto";
+    this.style.height = this.scrollHeight + "px";
+});
 </script>
 {% endblock %}

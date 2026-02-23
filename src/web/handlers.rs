@@ -243,6 +243,34 @@ pub async fn api_upload_skill(
     Ok(axum::Json(skill))
 }
 
+pub async fn api_list_skills(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    // Verify agent exists
+    agents::get_agent(&state.db, &id)?
+        .ok_or_else(|| anyhow::anyhow!("Agent not found"))?;
+
+    let agent_skills = skills::list_skills(&state.db, &id)?;
+    let result: Vec<serde_json::Value> = agent_skills
+        .into_iter()
+        .map(|s| {
+            let tool_count = serde_json::from_str::<Vec<serde_json::Value>>(&s.parsed_tools_json)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            serde_json::json!({
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "base_url": s.base_url,
+                "tool_count": tool_count,
+            })
+        })
+        .collect();
+
+    Ok(axum::Json(result))
+}
+
 pub async fn api_delete_skill(
     State(state): State<Arc<AppState>>,
     Path((id, skill_id)): Path<(String, String)>,

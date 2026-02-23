@@ -1,9 +1,12 @@
+use std::convert::Infallible;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
-use axum::response::sse::{KeepAlive, Sse};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
+use futures_util::StreamExt;
 use serde::Deserialize;
+use serde_json::json;
 
 use super::AppState;
 use crate::agent::{chat_agent, main_agent};
@@ -41,7 +44,11 @@ pub async fn configure_stream(
     let http_client = state.http_client.clone();
     let conv_id = conv.id.clone();
 
-    let stream = main_agent::run_configure_stream(db, config, http_client, agent, conv_id);
+    let session_event = futures_util::stream::once(async move {
+        Ok::<_, Infallible>(Event::default().data(json!({"session_id": session_id}).to_string()))
+    });
+    let agent_stream = main_agent::run_configure_stream(db, config, http_client, agent, conv_id);
+    let stream = session_event.chain(agent_stream);
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
@@ -71,7 +78,11 @@ pub async fn chat_stream(
     let http_client = state.http_client.clone();
     let conv_id = conv.id.clone();
 
-    let stream = chat_agent::run_chat_stream(db, config, http_client, agent, conv_id);
+    let session_event = futures_util::stream::once(async move {
+        Ok::<_, Infallible>(Event::default().data(json!({"session_id": session_id}).to_string()))
+    });
+    let agent_stream = chat_agent::run_chat_stream(db, config, http_client, agent, conv_id);
+    let stream = session_event.chain(agent_stream);
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
