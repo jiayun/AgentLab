@@ -62,6 +62,7 @@ impl OpenAiCompatibleProvider {
         }
 
         tracing::info!(model = %self.model, tool_count, "LLM chat request");
+        tracing::debug!(request_body = %body, "LLM request payload");
 
         let resp = self
             .build_request(&body)
@@ -72,7 +73,12 @@ impl OpenAiCompatibleProvider {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %text, "LLM API error");
+            tracing::error!(
+                status = %status,
+                response_body = %text,
+                request_body = %body,
+                "LLM API error"
+            );
             anyhow::bail!("LLM API error {status}: {text}");
         }
 
@@ -114,6 +120,8 @@ impl OpenAiCompatibleProvider {
             "stream": true,
         });
 
+        tracing::debug!(request_body = %body, "LLM stream request payload");
+
         let resp = self
             .build_request(&body)
             .header("Accept", "text/event-stream")
@@ -124,7 +132,12 @@ impl OpenAiCompatibleProvider {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %text, "LLM streaming API error");
+            tracing::error!(
+                status = %status,
+                response_body = %text,
+                request_body = %body,
+                "LLM streaming API error"
+            );
             anyhow::bail!("LLM API error {status}: {text}");
         }
 

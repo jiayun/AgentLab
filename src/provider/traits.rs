@@ -83,6 +83,8 @@ pub struct FunctionDefinition {
     pub name: String,
     pub description: String,
     pub parameters: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
 }
 
 impl ToolDefinition {
@@ -93,6 +95,19 @@ impl ToolDefinition {
                 name: name.to_string(),
                 description: description.to_string(),
                 parameters,
+                strict: None,
+            },
+        }
+    }
+
+    pub fn new_strict(name: &str, description: &str, parameters: serde_json::Value) -> Self {
+        Self {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: name.to_string(),
+                description: description.to_string(),
+                parameters,
+                strict: Some(true),
             },
         }
     }
