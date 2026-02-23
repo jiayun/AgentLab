@@ -191,7 +191,7 @@ fn execute_tool(
             Ok(format!("Updated model to '{val}'."))
         }
         "update_agent_temperature" => {
-            let val = args["temperature"].as_f64().unwrap_or(0.7);
+            let val = args["temperature"].as_f64().unwrap_or(1.0);
             agents::update_agent_temperature(db, &agent.id, val)?;
             Ok(format!("Updated temperature to {val}."))
         }
@@ -291,7 +291,7 @@ pub async fn run_configure(
 
     // Tool call loop
     for iteration in 0..MAX_TOOL_ITERATIONS {
-        let resp = provider.chat(&messages, Some(&tools), 0.7).await?;
+        let resp = provider.chat(&messages, Some(&tools), 1.0).await?;
 
         if resp.has_tool_calls() {
             tracing::debug!(iteration, tool_calls = resp.tool_calls.len(), "Tool loop: LLM requested tool calls");

@@ -126,9 +126,9 @@ pub fn create_agent(db: &DbPool, input: &CreateAgent) -> Result<Agent> {
 
     let conn = db.lock();
     conn.execute(
-        "INSERT INTO agents (id, name, display_name, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![&id, &input.name, &input.display_name, &now, &now],
+        "INSERT INTO agents (id, name, display_name, temperature, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![&id, &input.name, &input.display_name, 1.0, &now, &now],
     )
     .context("Failed to create agent")?;
 

@@ -33,7 +33,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             instructions TEXT NOT NULL DEFAULT '',
             system_prompt TEXT NOT NULL DEFAULT '',
             model TEXT NOT NULL DEFAULT '',
-            temperature REAL NOT NULL DEFAULT 0.7,
+            temperature REAL NOT NULL DEFAULT 1.0,
             is_main_agent INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -85,13 +85,14 @@ fn seed_main_agent(conn: &Connection) -> Result<()> {
     if count == 0 {
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
-            "INSERT INTO agents (id, name, display_name, soul, is_main_agent, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)",
+            "INSERT INTO agents (id, name, display_name, soul, temperature, is_main_agent, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)",
             rusqlite::params![
                 uuid::Uuid::new_v4().to_string(),
                 "__main_agent__",
                 "Main Agent",
                 "You are the main configuration agent for AgentLab. You help users configure and customize other AI agents through natural conversation.",
+                1.0,
                 &now,
                 &now,
             ],
