@@ -152,11 +152,12 @@ pub fn parse_openapi_spec(spec_json: &str) -> Result<Vec<ParsedOperation>> {
                 }
             }
 
-            let parameters_schema = serde_json::json!({
+            let parameters_schema_raw = serde_json::json!({
                 "type": "object",
                 "properties": properties,
                 "required": required_fields,
             });
+            let parameters_schema = resolve_schema_deep(&spec, &parameters_schema_raw, 0);
 
             operations.push(ParsedOperation {
                 operation_id: op_id,
@@ -173,10 +174,115 @@ pub fn parse_openapi_spec(spec_json: &str) -> Result<Vec<ParsedOperation>> {
     Ok(operations)
 }
 
+/// Maximum allowed length for tool/function names (Gemini limit is 64).
+const MAX_TOOL_NAME_LEN: usize = 64;
+
+/// Allowed JSON Schema keys for LLM function calling compatibility.
+/// Gemini only supports: type, description, enum, items, properties, required, nullable.
+const ALLOWED_SCHEMA_KEYS: &[&str] = &[
+    "type",
+    "description",
+    "enum",
+    "items",
+    "properties",
+    "required",
+    "nullable",
+    "additionalProperties",
+];
+
+/// Truncate a tool name to fit within the provider's limit.
+pub fn sanitize_tool_name(name: &str) -> String {
+    if name.len() <= MAX_TOOL_NAME_LEN {
+        name.to_string()
+    } else {
+        name[..MAX_TOOL_NAME_LEN].to_string()
+    }
+}
+
+/// Recursively strip unsupported JSON Schema fields for broad LLM provider compatibility.
+/// Converts `title` to `description` when no `description` is present.
+pub fn sanitize_schema(value: &Value) -> Value {
+    sanitize_schema_inner(value, false)
+}
+
+/// Inner recursive sanitizer.
+/// `is_properties_map` indicates whether `value` is the value of a `properties` key,
+/// meaning its keys are field names (not schema keywords) and should NOT be filtered.
+fn sanitize_schema_inner(value: &Value, is_properties_map: bool) -> Value {
+    match value {
+        Value::Object(map) => {
+            if is_properties_map {
+                // This is a properties map: keys are field names, values are schemas
+                let mut out = serde_json::Map::new();
+                for (k, v) in map {
+                    out.insert(k.clone(), sanitize_schema_inner(v, false));
+                }
+                return Value::Object(out);
+            }
+
+            // This is a schema object: filter keys to allowed set
+            let mut out = serde_json::Map::new();
+
+            // Promote title → description if description is absent
+            let has_description = map.contains_key("description");
+            if !has_description {
+                if let Some(title) = map.get("title").and_then(|v| v.as_str()) {
+                    out.insert("description".to_string(), Value::String(title.to_string()));
+                }
+            }
+
+            for (k, v) in map {
+                if !ALLOWED_SCHEMA_KEYS.contains(&k.as_str()) {
+                    continue;
+                }
+                // properties value is a map of field names → schemas
+                let child_is_props = k == "properties";
+                out.insert(k.clone(), sanitize_schema_inner(v, child_is_props));
+            }
+
+            // Prevent LLM from hallucinating extra fields
+            if out.contains_key("properties") && !out.contains_key("additionalProperties") {
+                out.insert("additionalProperties".to_string(), Value::Bool(false));
+            }
+
+            Value::Object(out)
+        }
+        Value::Array(arr) => {
+            Value::Array(arr.iter().map(|v| sanitize_schema_inner(v, false)).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Enrich a tool description by appending a summary of top-level parameter names.
+/// This helps LLMs understand available fields without inventing new ones.
+pub fn enrich_description(description: &str, schema: &Value) -> String {
+    let props = match schema.get("properties").and_then(|p| p.as_object()) {
+        Some(p) if !p.is_empty() => p,
+        _ => return description.to_string(),
+    };
+
+    let field_summaries: Vec<String> = props
+        .iter()
+        .map(|(name, prop)| {
+            let desc = prop.get("description").and_then(|d| d.as_str()).unwrap_or("");
+            if desc.is_empty() {
+                name.clone()
+            } else {
+                format!("{name}({desc})")
+            }
+        })
+        .collect();
+
+    format!(
+        "{description}. ONLY use these parameters: {}",
+        field_summaries.join(", ")
+    )
+}
+
 /// Resolve a `$ref` in the OpenAPI spec, returning the referenced value
-fn resolve_ref<'a>(spec: &'a Value, value: &'a Value) -> Value {
+fn resolve_ref(spec: &Value, value: &Value) -> Value {
     if let Some(ref_path) = value.get("$ref").and_then(|r| r.as_str()) {
-        // "#/components/schemas/Pet" -> ["components", "schemas", "Pet"]
         let parts: Vec<&str> = ref_path
             .trim_start_matches("#/")
             .split('/')
@@ -187,13 +293,79 @@ fn resolve_ref<'a>(spec: &'a Value, value: &'a Value) -> Value {
             current = current.get(*part).unwrap_or(&Value::Null);
         }
 
-        // Recursively resolve nested refs
-        if current.get("$ref").is_some() {
-            resolve_ref(spec, current)
-        } else {
-            current.clone()
-        }
+        resolve_ref(spec, current)
     } else {
         value.clone()
+    }
+}
+
+/// Recursively resolve all `$ref`, `allOf`, and nested schemas throughout a JSON value.
+/// This produces a self-contained schema with no `$ref` or `allOf` remaining.
+pub fn resolve_schema_deep(spec: &Value, value: &Value, depth: u8) -> Value {
+    if depth > 20 {
+        return Value::Null; // guard against infinite recursion
+    }
+
+    // 1. Resolve top-level $ref first
+    let resolved = resolve_ref(spec, value);
+
+    match &resolved {
+        Value::Object(map) => {
+            // 2. Handle allOf: merge all sub-schemas into one object
+            if let Some(all_of) = map.get("allOf").and_then(|v| v.as_array()) {
+                let mut merged = serde_json::Map::new();
+                // Copy sibling keys (e.g. "title", "description") excluding "allOf"
+                for (k, v) in map {
+                    if k != "allOf" {
+                        merged.insert(k.clone(), resolve_schema_deep(spec, v, depth + 1));
+                    }
+                }
+                // Merge each schema in allOf
+                for item in all_of {
+                    let item_resolved = resolve_schema_deep(spec, item, depth + 1);
+                    if let Value::Object(item_map) = item_resolved {
+                        for (k, v) in item_map {
+                            if k == "properties" {
+                                // Merge properties
+                                let existing = merged
+                                    .entry("properties")
+                                    .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                                if let (Value::Object(ep), Value::Object(vp)) = (existing, &v) {
+                                    for (pk, pv) in vp {
+                                        ep.insert(pk.clone(), pv.clone());
+                                    }
+                                }
+                            } else if k == "required" {
+                                // Merge required arrays
+                                let existing = merged
+                                    .entry("required")
+                                    .or_insert_with(|| Value::Array(vec![]));
+                                if let (Value::Array(ea), Value::Array(va)) = (existing, &v) {
+                                    ea.extend(va.clone());
+                                }
+                            } else {
+                                merged.entry(k).or_insert(v);
+                            }
+                        }
+                    }
+                }
+                // Ensure merged object has "type": "object" if it has properties
+                if merged.contains_key("properties") && !merged.contains_key("type") {
+                    merged.insert("type".to_string(), Value::String("object".to_string()));
+                }
+                return Value::Object(merged);
+            }
+
+            // 3. Recurse into all object values
+            let mut new_map = serde_json::Map::new();
+            for (k, v) in map {
+                new_map.insert(k.clone(), resolve_schema_deep(spec, v, depth + 1));
+            }
+            Value::Object(new_map)
+        }
+        Value::Array(arr) => {
+            Value::Array(arr.iter().map(|v| resolve_schema_deep(spec, v, depth + 1)).collect())
+        }
+        other => other.clone(),
     }
 }

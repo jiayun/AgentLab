@@ -55,11 +55,17 @@ pub async fn run_chat(
 
     for skill in &agent_skills {
         if let Ok(ops) = serde_json::from_str::<Vec<parser::ParsedOperation>>(&skill.parsed_tools_json) {
+            // Parse original spec for deep $ref resolution
+            let spec: serde_json::Value = serde_json::from_str(&skill.openapi_spec).unwrap_or_default();
             for op in &ops {
-                tool_defs.push(ToolDefinition::new(
-                    &op.operation_id,
-                    &op.description,
-                    op.parameters_schema.clone(),
+                let resolved = parser::resolve_schema_deep(&spec, &op.parameters_schema, 0);
+                let sanitized = parser::sanitize_schema(&resolved);
+                let name = parser::sanitize_tool_name(&op.operation_id);
+                let description = parser::enrich_description(&op.description, &sanitized);
+                tool_defs.push(ToolDefinition::new_strict(
+                    &name,
+                    &description,
+                    sanitized,
                 ));
             }
             parsed_ops.extend(ops);
@@ -148,16 +154,16 @@ async fn execute_skill_tool(
     tool_name: &str,
     arguments: &str,
 ) -> Result<String> {
-    // Find the matching operation
+    // Find the matching operation (support both exact and truncated name matching)
     let op = parsed_ops
         .iter()
-        .find(|o| o.operation_id == tool_name)
+        .find(|o| o.operation_id == tool_name || parser::sanitize_tool_name(&o.operation_id) == tool_name)
         .ok_or_else(|| anyhow::anyhow!("Unknown tool: {tool_name}"))?;
 
     // Find the skill that contains this operation (for base_url and auth)
     let skill = agent_skills.iter().find(|s| {
         serde_json::from_str::<Vec<parser::ParsedOperation>>(&s.parsed_tools_json)
-            .map(|ops| ops.iter().any(|o| o.operation_id == tool_name))
+            .map(|ops| ops.iter().any(|o| o.operation_id == op.operation_id))
             .unwrap_or(false)
     });
 
