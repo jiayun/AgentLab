@@ -40,6 +40,8 @@ async fn main() -> Result<()> {
         http_client: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(120))
             .build()?,
+        room_channels: dashmap::DashMap::new(),
+        room_human_replies: Arc::new(dashmap::DashMap::new()),
     });
 
     // Create router with NormalizePathLayer to trim trailing slashes

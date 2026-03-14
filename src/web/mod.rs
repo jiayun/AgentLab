@@ -1,13 +1,16 @@
 pub mod handlers;
+pub mod room_handlers;
 pub mod sse;
 
 use std::sync::Arc;
 
 use axum::http::StatusCode;
 use axum::Router;
+use tokio::sync::{broadcast, oneshot};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
+use crate::agent::room_orchestrator::RoomEvent;
 use crate::config::AppConfig;
 use crate::db::DbPool;
 
@@ -15,6 +18,8 @@ pub struct AppState {
     pub db: DbPool,
     pub config: Arc<AppConfig>,
     pub http_client: reqwest::Client,
+    pub room_channels: dashmap::DashMap<String, broadcast::Sender<RoomEvent>>,
+    pub room_human_replies: Arc<dashmap::DashMap<String, oneshot::Sender<String>>>,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -51,6 +56,48 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/agents/{id}",
             axum::routing::delete(handlers::api_delete_agent),
+        )
+        .route(
+            "/agents",
+            axum::routing::get(handlers::api_list_agents),
+        )
+        // Room API routes
+        .route(
+            "/rooms",
+            axum::routing::get(room_handlers::api_list_rooms),
+        )
+        .route(
+            "/rooms/{room_id}",
+            axum::routing::get(room_handlers::api_get_room)
+                .delete(room_handlers::api_delete_room),
+        )
+        .route(
+            "/rooms/{room_id}/participants",
+            axum::routing::post(room_handlers::api_add_participant),
+        )
+        .route(
+            "/rooms/{room_id}/start",
+            axum::routing::post(room_handlers::api_start_room),
+        )
+        .route(
+            "/rooms/{room_id}/stop",
+            axum::routing::post(room_handlers::api_stop_room),
+        )
+        .route(
+            "/rooms/{room_id}/reply",
+            axum::routing::post(room_handlers::api_reply),
+        )
+        .route(
+            "/rooms/{room_id}/intervene",
+            axum::routing::post(room_handlers::api_intervene),
+        )
+        .route(
+            "/rooms/{room_id}/messages",
+            axum::routing::get(room_handlers::api_messages),
+        )
+        .route(
+            "/rooms/{room_id}/stream",
+            axum::routing::get(room_handlers::room_stream),
         );
 
     let admin_routes = Router::new()
@@ -67,6 +114,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/agents/{id}/chat",
             axum::routing::get(handlers::agent_chat_page),
+        )
+        // Room page routes
+        .route("/rooms", axum::routing::get(room_handlers::rooms_page))
+        .route("/rooms/new", axum::routing::get(room_handlers::room_new_page))
+        .route(
+            "/rooms/create",
+            axum::routing::post(room_handlers::create_room),
+        )
+        .route(
+            "/rooms/{room_id}",
+            axum::routing::get(room_handlers::room_view_page),
         )
         .nest("/api", api_routes);
 

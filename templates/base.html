@@ -11,6 +11,10 @@
 <body>
     <nav class="navbar">
         <a href="/admin/" class="nav-brand">AgentLab</a>
+        <div style="display:inline-flex;gap:16px;margin-left:24px;">
+            <a href="/admin/" style="color:var(--text-muted);text-decoration:none;font-size:14px;">Agents</a>
+            <a href="/admin/rooms" style="color:var(--text-muted);text-decoration:none;font-size:14px;">Rooms</a>
+        </div>
     </nav>
     <main class="container">
         {% block content %}{% endblock %}

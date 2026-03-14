@@ -28,7 +28,7 @@ fn default_port() -> u16 {
     8080
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ProviderConfig {
     #[serde(default = "default_api_url")]
     pub api_url: String,

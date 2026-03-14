@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod conversations;
+pub mod rooms;
 pub mod skills;
 
 use anyhow::{Context, Result};
@@ -68,6 +69,42 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             auth_value TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(agent_id, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS rooms (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            orchestrator_agent_id TEXT NOT NULL REFERENCES agents(id),
+            status TEXT NOT NULL DEFAULT 'created',
+            scenario TEXT NOT NULL DEFAULT '',
+            max_turns INTEGER NOT NULL DEFAULT 100,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS room_participants (
+            id TEXT PRIMARY KEY,
+            room_id TEXT NOT NULL REFERENCES rooms(id),
+            agent_id TEXT REFERENCES agents(id),
+            role TEXT NOT NULL DEFAULT 'participant',
+            alias TEXT NOT NULL DEFAULT '',
+            private_context TEXT NOT NULL DEFAULT '',
+            is_human INTEGER NOT NULL DEFAULT 0,
+            joined_at TEXT NOT NULL,
+            UNIQUE(room_id, alias)
+        );
+
+        CREATE TABLE IF NOT EXISTS room_messages (
+            id TEXT PRIMARY KEY,
+            room_id TEXT NOT NULL REFERENCES rooms(id),
+            sender_alias TEXT NOT NULL DEFAULT '',
+            visibility TEXT NOT NULL DEFAULT 'public',
+            target_alias TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL,
+            message_type TEXT NOT NULL DEFAULT 'chat',
+            turn_number INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
         );
         ",
     )

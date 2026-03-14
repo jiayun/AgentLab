@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}New Room - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Create Room</h1>
+    <a href="/admin/rooms" class="btn btn-secondary">Back to Rooms</a>
+</div>
+
+<form class="form" method="POST" action="/admin/rooms/create">
+    <div class="form-group">
+        <label>Room Name</label>
+        <input type="text" name="name" required placeholder="e.g. Werewolf Game Room">
+    </div>
+
+    <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" rows="2" placeholder="Brief description of this room"></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Orchestrator Agent (GM)</label>
+        <select name="orchestrator_agent_id" required style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;">
+            <option value="">-- Select an agent --</option>
+            {% for agent in agents %}
+            <option value="{{ agent.id }}">{{ agent.display_name }} (@{{ agent.name }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Scenario / Game Rules</label>
+        <textarea name="scenario" rows="6" placeholder="Describe the game rules, scenario, and how the session should proceed..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Max Turns</label>
+        <input type="number" name="max_turns" value="100" min="1" max="1000">
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create Room</button>
+        <a href="/admin/rooms" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

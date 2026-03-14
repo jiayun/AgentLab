@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Rooms - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Rooms</h1>
+    <a href="/admin/rooms/new" class="btn btn-primary">+ New Room</a>
+</div>
+
+{% if rooms.is_empty() %}
+<div class="empty-state">
+    <p>No rooms yet. Create a room to start a multi-agent session.</p>
+</div>
+{% else %}
+<div class="agent-grid">
+    {% for r in rooms %}
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <h3>{{ r.room.name }}</h3>
+            <span class="agent-name">
+                <span class="room-status room-status-{{ r.room.status }}">{{ r.room.status }}</span>
+                &middot; Orchestrator: {{ r.orchestrator_name }}
+            </span>
+        </div>
+        <div class="agent-card-body">
+            {% if !r.room.description.is_empty() %}
+            <p class="agent-soul">{{ r.room.description }}</p>
+            {% else %}
+            <p class="text-muted">No description</p>
+            {% endif %}
+        </div>
+        <div class="agent-card-footer">
+            <a href="/admin/rooms/{{ r.room.id }}" class="btn btn-sm btn-primary">View</a>
+            <button class="btn btn-sm btn-danger"
+                    onclick="deleteRoom('{{ r.room.id }}', '{{ r.room.name }}', this)">Delete</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<script>
+function deleteRoom(id, name, btn) {
+    if (!confirm('Delete room "' + name + '"? This will remove all messages.')) return;
+    fetch('/admin/api/rooms/' + id, { method: 'DELETE' })
+        .then(r => {
+            if (r.ok) btn.closest('.agent-card').remove();
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}{{ room.name }} - AgentLab{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ room.name }}</h1>
+    <div style="display:flex;gap:8px;align-items:center;">
+        <span class="room-status room-status-{{ room.status }}" id="room-status">{{ room.status }}</span>
+        <button class="btn btn-primary btn-sm" id="btn-start" onclick="startRoom()"
+            {% if room.status == "running" %}disabled{% endif %}>Start</button>
+        <button class="btn btn-danger btn-sm" id="btn-stop" onclick="stopRoom()"
+            {% if room.status != "running" %}disabled{% endif %}>Stop</button>
+        <a href="/admin/rooms" class="btn btn-secondary btn-sm">Back</a>
+    </div>
+</div>
+
+<div class="room-layout">
+    <!-- Messages panel -->
+    <div class="room-messages-panel">
+        <div class="chat-messages" id="room-messages">
+            {% for msg in messages %}
+            {% if msg.visibility == "private" %}
+            <div class="message room-msg room-msg-private room-msg-private-collapsed" onclick="this.classList.toggle('expanded')">
+                <div class="msg-private-header">
+                    🔒 {{ msg.sender_alias }} → {{ msg.target_alias }} 私訊
+                    <span class="msg-turn">Turn {{ msg.turn_number }}</span>
+                    <span class="msg-expand-hint">(click to toggle)</span>
+                </div>
+                <div class="msg-private-body">
+                    <div class="message-content">{{ msg.content }}</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="message room-msg room-msg-{{ msg.visibility }}">
+                <div class="message-role">
+                    {{ msg.sender_alias }}
+                    {% if msg.visibility == "system" %}
+                    <span class="msg-badge msg-badge-system">system</span>
+                    {% endif %}
+                    <span class="msg-turn">Turn {{ msg.turn_number }}</span>
+                </div>
+                <div class="message-content">{{ msg.content }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Human reply area (hidden by default) -->
+        <div id="human-reply-area" style="display:none;">
+            <div class="system-message" id="human-question"></div>
+            <form class="chat-input-form" onsubmit="sendHumanReply(event)">
+                <input type="hidden" id="human-alias" value="">
+                <textarea id="human-input" placeholder="Type your reply..." rows="1"></textarea>
+                <button type="submit" class="btn btn-primary">Reply</button>
+            </form>
+        </div>
+
+        <!-- GM intervention -->
+        <form class="chat-input-form" onsubmit="sendIntervention(event)" style="margin-top:8px;">
+            <textarea id="intervene-input" placeholder="GM intervention (system message)..." rows="1"></textarea>
+            <button type="submit" class="btn btn-sm">Intervene</button>
+        </form>
+    </div>
+
+    <!-- Sidebar: participants + add participant -->
+    <div class="room-sidebar">
+        <h3>Participants</h3>
+        <div id="participants-list">
+            {% for p in participants %}
+            <div class="participant-item">
+                <strong>{{ p.alias }}</strong>
+                <span class="text-muted">
+                    {% if p.is_human %}(human){% else %}(AI){% endif %}
+                    &middot; {{ p.role }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <h3 style="margin-top:16px;">Add Participant</h3>
+        <form onsubmit="addParticipant(event)" id="add-participant-form">
+            <div class="form-group">
+                <label>Alias</label>
+                <input type="text" id="p-alias" required placeholder="e.g. Player 1">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select id="p-type" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;" onchange="toggleAgentSelect()">
+                    <option value="ai">AI Agent</option>
+                    <option value="human">Human Player</option>
+                </select>
+            </div>
+            <div class="form-group" id="p-agent-group">
+                <label>Agent</label>
+                <select id="p-agent-id" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;">
+                    <option value="">-- loading --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Private Context (secret info)</label>
+                <textarea id="p-private-context" rows="2" placeholder="e.g. You are the werewolf"></textarea>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">Add</button>
+        </form>
+    </div>
+</div>
+
+<style>
+.room-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    height: calc(100vh - 140px);
+}
+.room-messages-panel {
+    display: flex;
+    flex-direction: column;
+}
+.room-messages-panel .chat-messages {
+    flex: 1;
+}
+.room-sidebar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    overflow-y: auto;
+}
+.room-sidebar h3 { font-size: 14px; margin-bottom: 12px; text-transform: uppercase; color: var(--text-muted); }
+.participant-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+.room-status { font-size: 12px; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; font-weight: 600; }
+.room-status-created { background: rgba(136,136,136,0.2); color: #888; }
+.room-status-running { background: rgba(34,197,94,0.2); color: #22c55e; }
+.room-status-paused { background: rgba(234,179,8,0.2); color: #eab308; }
+.room-status-finished { background: rgba(59,130,246,0.2); color: #3b82f6; }
+.room-status-stopped { background: rgba(239,68,68,0.2); color: #ef4444; }
+.msg-badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+.msg-badge-private { background: rgba(234,179,8,0.2); color: #eab308; }
+.msg-badge-system { background: rgba(59,130,246,0.2); color: #3b82f6; }
+.msg-turn { font-size: 11px; color: var(--text-muted); margin-left: 8px; }
+.room-msg-private { opacity: 0.85; border-left: 2px solid #eab308; padding-left: 8px; }
+.room-msg-private-collapsed { cursor: pointer; }
+.room-msg-private-collapsed .msg-private-body { display: none; }
+.room-msg-private-collapsed.expanded .msg-private-body { display: block; }
+.msg-private-header { font-size: 13px; font-weight: 600; color: #eab308; padding: 4px 0; }
+.msg-expand-hint { font-size: 11px; color: var(--text-muted); font-weight: normal; margin-left: 8px; }
+.room-msg-system { opacity: 0.7; font-style: italic; }
+</style>
+
+<script>
+const roomId = "{{ room.id }}";
+const viewerAlias = "{{ viewer_alias }}";
+
+// Load agents for the dropdown
+fetch('/admin/api/agents')
+    .then(r => r.json())
+    .then(agents => {
+        const select = document.getElementById('p-agent-id');
+        select.innerHTML = '<option value="">-- Select agent --</option>';
+        agents.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            opt.textContent = a.display_name + ' (@' + a.name + ')';
+            select.appendChild(opt);
+        });
+    });
+
+function toggleAgentSelect() {
+    const type = document.getElementById('p-type').value;
+    document.getElementById('p-agent-group').style.display = type === 'ai' ? 'block' : 'none';
+}
+
+function addParticipant(e) {
+    e.preventDefault();
+    const alias = document.getElementById('p-alias').value.trim();
+    const type = document.getElementById('p-type').value;
+    const agentId = document.getElementById('p-agent-id').value.trim();
+    const privateContext = document.getElementById('p-private-context').value.trim();
+    const isHuman = type === 'human';
+
+    if (!alias) return;
+    if (!isHuman && !agentId) { alert('Agent ID is required for AI participants'); return; }
+
+    fetch('/admin/api/rooms/' + roomId + '/participants', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            alias: alias,
+            agent_id: isHuman ? null : agentId,
+            role: 'participant',
+            private_context: privateContext,
+            is_human: isHuman,
+        })
+    })
+    .then(r => r.json())
+    .then(p => {
+        const list = document.getElementById('participants-list');
+        const div = document.createElement('div');
+        div.className = 'participant-item';
+        const typeLabel = p.is_human ? '(human)' : '(AI)';
+        div.innerHTML = '<strong>' + escapeHtml(p.alias) + '</strong> <span class="text-muted">' + typeLabel + ' &middot; ' + escapeHtml(p.role) + '</span>';
+        list.appendChild(div);
+        document.getElementById('add-participant-form').reset();
+    })
+    .catch(err => alert('Error: ' + err));
+}
+
+function startRoom() {
+    fetch('/admin/api/rooms/' + roomId + '/start', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            updateStatus('running');
+            connectSSE();
+        });
+}
+
+function stopRoom() {
+    fetch('/admin/api/rooms/' + roomId + '/stop', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => updateStatus('stopped'));
+}
+
+function updateStatus(status) {
+    const el = document.getElementById('room-status');
+    el.textContent = status;
+    el.className = 'room-status room-status-' + status;
+    document.getElementById('btn-start').disabled = (status === 'running');
+    document.getElementById('btn-stop').disabled = (status !== 'running');
+}
+
+function connectSSE() {
+    let sseUrl = '/admin/api/rooms/' + roomId + '/stream';
+    if (viewerAlias) {
+        sseUrl += '?as=' + encodeURIComponent(viewerAlias);
+    }
+    const source = new EventSource(sseUrl);
+    source.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleRoomEvent(data);
+    };
+    source.onerror = function() {
+        // Reconnect handled by browser
+    };
+}
+
+function handleRoomEvent(event) {
+    const messages = document.getElementById('room-messages');
+
+    switch(event.type) {
+        case 'MessageSent': {
+            const div = document.createElement('div');
+            if (event.visibility === 'private') {
+                div.className = 'message room-msg room-msg-private room-msg-private-collapsed';
+                div.onclick = function() { this.classList.toggle('expanded'); };
+                div.innerHTML = '<div class="msg-private-header">🔒 ' + escapeHtml(event.sender_alias) + ' → ' + escapeHtml(event.target_alias) + ' 私訊'
+                    + ' <span class="msg-expand-hint">(click to toggle)</span></div>'
+                    + '<div class="msg-private-body"><div class="message-content">' + escapeHtml(event.content) + '</div></div>';
+            } else {
+                let badge = '';
+                if (event.visibility === 'system') {
+                    badge = '<span class="msg-badge msg-badge-system">system</span>';
+                }
+                div.className = 'message room-msg room-msg-' + event.visibility;
+                div.innerHTML = '<div class="message-role">' + escapeHtml(event.sender_alias) + badge + '</div>'
+                    + '<div class="message-content">' + escapeHtml(event.content) + '</div>';
+            }
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            break;
+        }
+        case 'AgentResponded': {
+            const div = document.createElement('div');
+            if (event.visibility === 'private') {
+                div.className = 'message room-msg room-msg-private room-msg-private-collapsed';
+                div.onclick = function() { this.classList.toggle('expanded'); };
+                div.innerHTML = '<div class="msg-private-header">🔒 ' + escapeHtml(event.agent_alias) + ' → ' + escapeHtml(event.target_alias) + ' 私訊回覆'
+                    + ' <span class="msg-expand-hint">(click to toggle)</span></div>'
+                    + '<div class="msg-private-body"><div class="message-content">' + escapeHtml(event.content) + '</div></div>';
+            } else {
+                div.className = 'message room-msg';
+                div.innerHTML = '<div class="message-role" style="color:var(--success)">' + escapeHtml(event.agent_alias) + '</div>'
+                    + '<div class="message-content">' + escapeHtml(event.content) + '</div>';
+            }
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            break;
+        }
+        case 'WaitingForHuman': {
+            const area = document.getElementById('human-reply-area');
+            area.style.display = 'block';
+            document.getElementById('human-question').textContent = event.alias + ' is being asked: ' + event.question;
+            document.getElementById('human-alias').value = event.alias;
+            document.getElementById('human-input').focus();
+            break;
+        }
+        case 'TurnAdvanced': {
+            const div = document.createElement('div');
+            div.className = 'message room-msg room-msg-system';
+            div.innerHTML = '<div class="message-content">--- Turn ' + event.turn_number + ' ---</div>';
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            break;
+        }
+        case 'SessionEnded': {
+            const div = document.createElement('div');
+            div.className = 'message room-msg room-msg-system';
+            div.innerHTML = '<div class="message-content">Session ended: ' + escapeHtml(event.summary) + '</div>';
+            messages.appendChild(div);
+            updateStatus('finished');
+            break;
+        }
+        case 'Error': {
+            const div = document.createElement('div');
+            div.className = 'message room-msg';
+            div.innerHTML = '<div class="message-content" style="color:var(--danger)">Error: ' + escapeHtml(event.message) + '</div>';
+            messages.appendChild(div);
+            break;
+        }
+    }
+}
+
+function sendHumanReply(e) {
+    e.preventDefault();
+    const alias = document.getElementById('human-alias').value;
+    const content = document.getElementById('human-input').value.trim();
+    if (!content) return;
+
+    fetch('/admin/api/rooms/' + roomId + '/reply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ alias: alias, content: content })
+    }).then(() => {
+        document.getElementById('human-reply-area').style.display = 'none';
+        document.getElementById('human-input').value = '';
+    });
+}
+
+function sendIntervention(e) {
+    e.preventDefault();
+    const input = document.getElementById('intervene-input');
+    const content = input.value.trim();
+    if (!content) return;
+
+    fetch('/admin/api/rooms/' + roomId + '/intervene', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ content: content })
+    }).then(() => { input.value = ''; });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Auto-connect SSE if room is running
+if ("{{ room.status }}" === "running") {
+    connectSSE();
+}
+
+// Scroll to bottom on load
+document.getElementById('room-messages').scrollTop = document.getElementById('room-messages').scrollHeight;
+</script>
+{% endblock %}

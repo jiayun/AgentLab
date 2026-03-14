@@ -114,6 +114,13 @@ pub async fn health() -> impl IntoResponse {
     axum::Json(serde_json::json!({"status": "ok"}))
 }
 
+pub async fn api_list_agents(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let agent_list = agents::list_agents(&state.db)?;
+    Ok(axum::Json(serde_json::json!(agent_list)))
+}
+
 #[derive(Deserialize)]
 pub struct ChatInput {
     pub message: String,
