@@ -90,6 +90,13 @@ curl -X POST http://localhost:8080/api/agents/{id}/chat \
   -d '{"message": "Hello!"}'
 ```
 
+## Documentation
+
+Usage guides are available in multiple languages:
+
+- **English**: [docs/en/](docs/en/README.md) — [Werewolf Game](docs/en/werewolf-game.md) · [Use Cases](docs/en/use-cases.md)
+- **繁體中文**: [docs/zh-TW/](docs/zh-TW/README.md) — [狼人殺遊戲](docs/zh-TW/werewolf-game.md) · [應用場景](docs/zh-TW/use-cases.md)
+
 ## Architecture
 
 ```
