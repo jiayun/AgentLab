@@ -12,7 +12,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 axum = { version = "0.8", features = ["json"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "timeout", "normalize-path", "trace"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 askama = "0.12"
 askama_axum = "0.4"
