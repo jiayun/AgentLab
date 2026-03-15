@@ -18,15 +18,35 @@ A Rust-based AI agent orchestration platform for managing and configuring multip
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (1.75+)
 - An OpenAI-compatible API endpoint (e.g., [Ollama](https://ollama.ai/))
 
-### Install & Run
+### Option A: Download Pre-built Binary
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/pttlink/AgentLab/releases).
+
+```bash
+# Extract and run (example for macOS/Linux)
+tar xzf agentlab-*.tar.gz
+cd agentlab-*/
+cp agentlab.toml.example agentlab.toml  # Edit config for your setup
+./agentlab
+```
+
+> **macOS**: macOS Gatekeeper will block unsigned binaries. Right-click the file and select "Open", or run:
+> ```bash
+> xattr -d com.apple.quarantine ./agentlab
+> ```
+>
+> **Windows**: Windows SmartScreen may show "Windows protected your PC". Click **"More info"** then **"Run anyway"** to proceed.
+
+### Option B: Build from Source
+
+Requires [Rust](https://rustup.rs/) (1.75+).
 
 ```bash
 git clone https://github.com/pttlink/AgentLab.git
 cd AgentLab
-cp agentlab.toml.example agentlab.toml  # Copy and edit config
+cp agentlab.toml.example agentlab.toml  # Edit config for your setup
 cargo build --release
 ./target/release/agentlab
 ```

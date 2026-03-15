@@ -46,16 +46,9 @@ mkdir -p "$DIST_DIR"
 cp "$BIN" "$DIST_DIR/"
 cp -r static "$DIST_DIR/"
 
-# Include sample config
-cat > "$DIST_DIR/agentlab.toml" << 'EOF'
-[server]
-port = 8080
-
-[provider]
-api_url = "http://localhost:11434/v1"
-model = "llama3.1"
-# api_key = "your-api-key"
-EOF
+# Include sample config and docs
+cp agentlab.toml.example "$DIST_DIR/"
+cp README.md LICENSE-MIT LICENSE-APACHE "$DIST_DIR/" 2>/dev/null || true
 
 # Create archive
 cd dist
