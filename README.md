@@ -26,13 +26,14 @@ A Rust-based AI agent orchestration platform for managing and configuring multip
 ```bash
 git clone https://github.com/pttlink/AgentLab.git
 cd AgentLab
+cp agentlab.toml.example agentlab.toml  # Copy and edit config
 cargo build --release
 ./target/release/agentlab
 ```
 
 ### Configuration
 
-Create an `agentlab.toml` in the project root:
+Edit `agentlab.toml` to match your setup:
 
 ```toml
 [server]

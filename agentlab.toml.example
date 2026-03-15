@@ -1,10 +1,12 @@
 # AgentLab Configuration
+# Copy this file to agentlab.toml and modify as needed.
+# Environment variables (AGENTLAB_*) override these settings.
 
 [server]
 port = 8080
 
 [provider]
-# Ollama OpenAI-compatible API endpoint
+# OpenAI-compatible API endpoint
 api_url = "http://localhost:11434/v1"
-model = "gemini-3-flash-preview:cloud"
+model = "llama3"
 # api_key = ""  # Optional: set if your provider requires authentication

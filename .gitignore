@@ -26,3 +26,12 @@ dist
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .claude/settings.local.json
+
+# Runtime config (may contain API keys or local preferences)
+agentlab.toml
+.env
+.env.*
+
+# Secrets
+*.pem
+*.key
